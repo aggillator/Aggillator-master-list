@@ -85,4 +85,90 @@
 
 <script>
 const SUPABASE_URL = 'https://fbkaafnyckxmngxpkpad.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZia2FhZm55Y2t4bW5neHBrcGFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MTIxMjksImV4cCI6MjA5ODM4ODEyOX0.d58a3RXbHnMyV6EU-QPTAey6q748QWMR2l7tsqKJM
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZia2FhZm55Y2t4bW5neHBrcGFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MTIxMjksImV4cCI6MjA5ODM4ODEyOX0.d58a3RXbHnMyV6EU-QPTAey6q748QWMR2l7tsqKJM8s';
+const REST_URL = SUPABASE_URL + '/rest/v1/master_list_items';
+
+function sbHeaders(extra) {
+  return Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, extra || {});
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+const COLUMNS = [
+  { key: 'master', label: 'Master', dotClass: 'master' },
+  { key: 'weekly', label: 'This Week', dotClass: 'weekly' },
+  { key: 'daily',  label: 'Today', dotClass: 'daily' },
+];
+
+const CATEGORIES = ['work','goh','health','coparenting','family','social','personal','admin'];
+
+let items = [];
+let expandedId = null;
+let loaded = false;
+async function loadItems() {
+  setStatus('Loading…');
+  try {
+    const res = await fetch(REST_URL + '?select=*&order=created_at.asc', { headers: sbHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    items = rows.map(r => ({ id: r.id, text: r.text, column: r.column_key, category: r.category || '', entryAction: r.entry_action || '' }));
+    setStatus('Loaded ' + items.length + ' item(s)');
+  } catch (e) {
+    setStatus('Load error: ' + (e && e.message ? e.message : String(e)));
+  }
+  loaded = true;
+  render();
+  setTimeout(() => setStatus(''), 3000);
+}
+
+async function addItem(column, text) {
+  if (!text || !text.trim()) return;
+  setStatus('Saving…');
+  try {
+    const res = await fetch(REST_URL, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify([{ text: text.trim(), column_key: column }])
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    const r = rows[0];
+    items.push({ id: r.id, text: r.text, column: r.column_key, category: r.category || '', entryAction: r.entry_action || '' });
+    setStatus('Saved');
+  } catch (e) {
+    setStatus('Save failed: ' + (e && e.message ? e.message : String(e)));
+  }
+  render();
+  setTimeout(() => setStatus(''), 1500);
+}
+
+async function deleteItem(id) {
+  items = items.filter(i => i.id !== id);
+  render();
+  try {
+    const res = await fetch(REST_URL + '?id=eq.' + id, { method: 'DELETE', headers: sbHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  } catch (e) {
+    setStatus('Delete failed: ' + (e && e.message ? e.message : String(e)));
+    setTimeout(() => setStatus(''), 2500);
+  }
+}
+
+async function moveItem(id, column) {
+  const item = items.find(i => i.id === id);
+  if (item) item.column = column;
+  render();
+  try {
+    const res = await fetch(REST_URL + '?id=eq.' + id, {
+      method: 'PATCH',
+      headers: sbHeaders(),
+      body: JSON.stringify({ column_key: column })
+    });
+    if (
+
